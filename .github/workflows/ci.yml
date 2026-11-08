@@ -1,7 +1,10 @@
 name: VUnit tests
 
 on:
+  # PR branches are covered by pull_request; push only builds the default
+  # branch so each PR commit is tested once.
   push:
+    branches: [master]
   pull_request:
 
 jobs:

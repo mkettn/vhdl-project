@@ -19,9 +19,10 @@ entity blinky is
 end entity;
 
 architecture rtl of blinky is
-  constant HALF_PERIOD : positive := CLK_FREQ_HZ / (2 * BLINK_FREQ_HZ);
+  -- natural (not positive) so that the assert below can report bad generics
+  constant HALF_PERIOD : natural := CLK_FREQ_HZ / (2 * BLINK_FREQ_HZ);
 
-  signal counter : natural range 0 to HALF_PERIOD - 1 := 0;
+  signal counter : natural range 0 to HALF_PERIOD := 0;
   signal led_i   : std_logic := '0';
 begin
   assert CLK_FREQ_HZ >= 2 * BLINK_FREQ_HZ

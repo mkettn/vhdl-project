@@ -18,7 +18,9 @@ use work.axi_rot13_pkg.all;
 
 entity axi_rot13 is
   generic (
-    ADDR_WIDTH : positive := 4
+    -- Must cover the register map (>= 4) and keep the word index within
+    -- the integer range (<= 32).
+    ADDR_WIDTH : positive range 4 to 32 := 4
   );
   port (
     aclk    : in  std_logic;
@@ -70,8 +72,10 @@ architecture rtl of axi_rot13 is
   signal rdata  : std_logic_vector(31 downto 0) := (others => '0');
   signal rresp  : std_logic_vector(1 downto 0) := RESP_OKAY;
 
-  -- Byte offsets of the addressed registers, ignoring the byte lane bits.
-  signal araddr_offset : natural;
+  -- Address decode: both paths reduce their address to a word index
+  -- (byte offset / 4) and compare it against the register map below.
+  signal wr_addr          : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal wr_word, rd_word : natural;
 begin
   rot13_inst : entity work.rot13
     generic map (NUM_BYTES => 4)
@@ -80,7 +84,10 @@ begin
       data_out => data_out
     );
 
-  araddr_offset <= 4 * to_integer(unsigned(s_axi_araddr(ADDR_WIDTH - 1 downto 2)));
+  -- The write address comes from the buffer if it arrived earlier.
+  wr_addr <= aw_addr when aw_valid = '1' else s_axi_awaddr;
+  wr_word <= to_integer(unsigned(wr_addr(ADDR_WIDTH - 1 downto 2)));
+  rd_word <= to_integer(unsigned(s_axi_araddr(ADDR_WIDTH - 1 downto 2)));
 
   -- Accept a new address/data beat only while nothing is buffered for it.
   s_axi_awready <= not aw_valid;
@@ -95,7 +102,6 @@ begin
 
   write_proc : process (aclk)
     variable have_aw, have_w : boolean;
-    variable addr            : std_logic_vector(ADDR_WIDTH - 1 downto 0);
     variable data            : std_logic_vector(31 downto 0);
     variable strb            : std_logic_vector(3 downto 0);
   begin
@@ -114,7 +120,6 @@ begin
         -- Combine freshly arriving beats with buffered ones.
         have_aw := aw_valid = '1' or s_axi_awvalid = '1';
         have_w  := w_valid = '1' or s_axi_wvalid = '1';
-        addr    := aw_addr when aw_valid = '1' else s_axi_awaddr;
         data    := w_data  when w_valid = '1'  else s_axi_wdata;
         strb    := w_strb  when w_valid = '1'  else s_axi_wstrb;
 
@@ -123,16 +128,18 @@ begin
           aw_valid <= '0';
           w_valid  <= '0';
           bvalid   <= '1';
-          if 4 * to_integer(unsigned(addr(ADDR_WIDTH - 1 downto 2))) = REG_DATA_IN then
-            for i in 0 to 3 loop
-              if strb(i) = '1' then
-                data_in(8 * i + 7 downto 8 * i) <= data(8 * i + 7 downto 8 * i);
-              end if;
-            end loop;
-            bresp <= RESP_OKAY;
-          else
-            bresp <= RESP_SLVERR;
-          end if;
+          case wr_word is
+            when REG_DATA_IN / 4 =>
+              for i in 0 to 3 loop
+                if strb(i) = '1' then
+                  data_in(8 * i + 7 downto 8 * i) <= data(8 * i + 7 downto 8 * i);
+                end if;
+              end loop;
+              bresp <= RESP_OKAY;
+            when others =>
+              -- read-only or unmapped
+              bresp <= RESP_SLVERR;
+          end case;
         else
           -- Buffer whichever half has arrived.
           if aw_valid = '0' and s_axi_awvalid = '1' then
@@ -164,10 +171,10 @@ begin
         if s_axi_arvalid = '1' and rvalid = '0' then
           rvalid <= '1';
           rresp  <= RESP_OKAY;
-          case araddr_offset is
-            when REG_DATA_IN  => rdata <= data_in;
-            when REG_DATA_OUT => rdata <= data_out;
-            when REG_ID       => rdata <= ROT13_ID;
+          case rd_word is
+            when REG_DATA_IN / 4  => rdata <= data_in;
+            when REG_DATA_OUT / 4 => rdata <= data_out;
+            when REG_ID / 4       => rdata <= ROT13_ID;
             when others =>
               rdata <= (others => '0');
               rresp <= RESP_SLVERR;

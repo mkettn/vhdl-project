@@ -1,7 +1,9 @@
 -- uart_rx: 8N1 UART receiver.
 --
 -- m_valid pulses for one clock cycle when a byte with a valid stop bit has
--- been received. A frame with a bad stop bit pulses frame_err instead.
+-- been received. A frame with a bad stop bit pulses frame_err instead; the
+-- receiver then waits for the line to return high before looking for the
+-- next start bit, so a BREAK or stuck-low line yields a single frame_err.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -22,9 +24,10 @@ entity uart_rx is
 end entity;
 
 architecture rtl of uart_rx is
-  constant CLKS_PER_BIT : positive := CLK_FREQ_HZ / BAUD_RATE;
+  -- natural (not positive) so that the assert below can report bad generics
+  constant CLKS_PER_BIT : natural := CLK_FREQ_HZ / BAUD_RATE;
 
-  type state_t is (IDLE, START, DATA, STOP);
+  type state_t is (IDLE, START, DATA, STOP, WAIT_IDLE);
   signal state : state_t := IDLE;
 
   -- Two-flop synchronizer for the asynchronous rx input.
@@ -32,7 +35,7 @@ architecture rtl of uart_rx is
 
   signal shreg    : std_logic_vector(7 downto 0) := (others => '0');
   signal bit_cnt  : natural range 0 to 7 := 0;
-  signal baud_cnt : natural range 0 to CLKS_PER_BIT - 1 := 0;
+  signal baud_cnt : natural range 0 to CLKS_PER_BIT := 0;
 begin
   assert CLKS_PER_BIT >= 4
     report "uart_rx: CLK_FREQ_HZ must be at least 4 * BAUD_RATE"
@@ -93,12 +96,20 @@ begin
               baud_cnt <= 0;
               if rx_sync = '1' then
                 m_valid <= '1';
+                state   <= IDLE;
               else
                 frame_err <= '1';
+                state     <= WAIT_IDLE;
               end if;
-              state <= IDLE;
             else
               baud_cnt <= baud_cnt + 1;
+            end if;
+
+          when WAIT_IDLE =>
+            -- Line still low after a framing error (e.g. BREAK): wait for
+            -- it to return high so its low level is not taken as a start bit.
+            if rx_sync = '1' then
+              state <= IDLE;
             end if;
         end case;
       end if;

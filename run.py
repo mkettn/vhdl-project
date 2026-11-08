@@ -38,7 +38,14 @@ def configure_uart_echo(lib):
         tb.add_config(name=f"baud={baud}", generics={"BAUD_RATE": baud})
 
 
+def configure_axi_rot13(lib):
+    tb = lib.test_bench("tb_axi_rot13")
+    for width in [4, 8]:
+        tb.add_config(name=f"addr_width={width}", generics={"ADDR_WIDTH": width})
+
+
 CONFIGURE = {
+    "axi_rot13": configure_axi_rot13,
     "blinky": configure_blinky,
     "uart_echo": configure_uart_echo,
 }
@@ -58,7 +65,11 @@ def main():
         if project.name in CONFIGURE:
             CONFIGURE[project.name](lib)
 
-    vu.set_sim_option("disable_ieee_warnings", True)
+
+    # Keep IEEE (numeric_std) warnings on: metavalue warnings are often the
+    # first sign of X/U propagation. Only the time-0 ones are suppressed,
+    # which come from signals that have not been driven yet.
+    vu.set_sim_option("ghdl.sim_flags", ["--ieee-asserts=disable-at-0"])
 
     vu.main()
 

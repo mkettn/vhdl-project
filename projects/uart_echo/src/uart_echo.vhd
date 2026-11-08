@@ -1,8 +1,11 @@
 -- uart_echo: echoes every byte received on rx back out on tx.
 --
--- A small FIFO decouples receiver and transmitter so back-to-back traffic
--- is not lost even if the local baud clock is slightly slower than the
--- remote one.
+-- A small FIFO absorbs bursts and small timing differences between the
+-- receiver and transmitter. The transmitter sends back-to-back frames with no
+-- idle gap (10 * CLKS_PER_BIT cycles each) and CLKS_PER_BIT rounds down, so
+-- it is never slower than a sender at the nominal baud rate. Sustained
+-- traffic from a sender that is faster than nominal will eventually overflow
+-- the FIFO; overflowing bytes are dropped.
 
 library ieee;
 use ieee.std_logic_1164.all;

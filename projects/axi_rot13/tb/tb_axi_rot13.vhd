@@ -16,12 +16,14 @@ use work.axi_rot13_pkg.all;
 use work.rot13_ref_pkg.all;
 
 entity tb_axi_rot13 is
-  generic (runner_cfg : string);
+  generic (
+    runner_cfg : string;
+    ADDR_WIDTH : positive := 4
+  );
 end entity;
 
 architecture tb of tb_axi_rot13 is
   constant CLK_PERIOD : time := 10 ns;
-  constant ADDR_WIDTH : positive := 4;
   constant MESSAGE    : string(1 to 16) := "Hello, World!...";
 
   constant bus_handle : bus_master_t := new_bus(data_length => 32, address_length => ADDR_WIDTH);
@@ -165,6 +167,18 @@ begin
       elsif run("unmapped_address_returns_slverr") then
         check_axi_lite(net, bus_handle, addr(16#C#), axi_resp_slverr, x"00000000");
         write_axi_lite(net, bus_handle, addr(16#C#), x"12345678", axi_resp_slverr);
+
+      elsif run("addresses_above_register_map_return_slverr") then
+        -- With a wider address bus, the upper bits must be decoded too:
+        -- REG_ID + 0x10 must not alias onto REG_ID.
+        if ADDR_WIDTH > 4 then
+          check_axi_lite(net, bus_handle, addr(REG_ID + 16#10#), axi_resp_slverr, x"00000000");
+          write_axi_lite(net, bus_handle, addr(REG_DATA_IN + 16#10#), x"12345678", axi_resp_slverr);
+          check_axi_lite(net, bus_handle, addr(REG_DATA_IN), axi_resp_okay, x"00000000",
+                         "DATA_IN unaffected by write above register map");
+        else
+          info("ADDR_WIDTH = 4 covers exactly the register map; nothing to check");
+        end if;
       end if;
     end loop;
 

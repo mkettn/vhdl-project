@@ -39,6 +39,11 @@ architecture tb of tb_uart_echo is
   signal rst : std_logic := '1';
   signal rx  : std_logic;
   signal tx  : std_logic;
+
+  -- Filled in by tx_monitor: start-bit times of the first and latest frame.
+  signal tx_frames      : natural := 0;
+  signal tx_first_start : time := 0 ns;
+  signal tx_last_start  : time := 0 ns;
 begin
   clk <= not clk after CLK_PERIOD / 2;
 
@@ -104,6 +109,22 @@ begin
           check_stream(net, uart_stream_out, std_logic_vector(to_unsigned(i, 8)));
         end loop;
 
+      elsif run("sustained_stream_keeps_up_with_sender") then
+        -- The echo must sustain the sender's rate, otherwise the FIFO fills
+        -- by a little every frame and eventually drops bytes. Measuring the
+        -- frame rate catches that long before the FIFO actually overflows.
+        for i in 1 to 64 loop
+          push_stream(net, uart_stream_in, std_logic_vector(to_unsigned(i, 8)));
+        end loop;
+        for i in 1 to 64 loop
+          check_stream(net, uart_stream_out, std_logic_vector(to_unsigned(i, 8)));
+        end loop;
+        check_equal(tx_frames, 64, "frames seen on tx");
+        -- Allow for clock quantisation at both ends of the measurement.
+        check(tx_last_start - tx_first_start <= 63 * 10 * BIT_TIME + 2 * CLK_PERIOD,
+              "63 echoed frames took " & time'image(tx_last_start - tx_first_start) &
+              ", sender needed " & time'image(63 * 10 * BIT_TIME));
+
       elsif run("echoes_random_bytes") then
         for i in 1 to 32 loop
           data := rnd.RandSlv(8);
@@ -114,6 +135,19 @@ begin
     end loop;
 
     test_runner_cleanup(runner);
+  end process;
+
+  -- Records the start bit of every frame on tx. After a falling edge it skips
+  -- to the middle of the stop bit, so data bits are never taken as starts.
+  tx_monitor : process
+  begin
+    wait until falling_edge(tx);
+    if tx_frames = 0 then
+      tx_first_start <= now;
+    end if;
+    tx_last_start <= now;
+    tx_frames     <= tx_frames + 1;
+    wait for 9.5 * BIT_TIME;
   end process;
 
   test_runner_watchdog(runner, 300 * 10 * BIT_TIME);
