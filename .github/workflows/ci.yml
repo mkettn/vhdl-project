@@ -1,0 +1,33 @@
+name: VUnit tests
+
+on:
+  # PR branches are covered by pull_request; push only builds the default
+  # branch so each PR commit is tested once.
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install GHDL
+        run: sudo apt-get update && sudo apt-get install -y ghdl
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python run.py -p 4 --xunit-xml test_results.xml
+
+      - name: Report test results
+        # Also report when tests failed, but not when nothing ran (e.g. compile error).
+        if: always() && hashFiles('test_results.xml') != ''
+        run: python tools/xunit_summary.py test_results.xml
