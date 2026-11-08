@@ -32,14 +32,12 @@ architecture rtl of sync_fifo is
   signal full, empty : std_logic;
   signal do_wr, do_rd : boolean;
 
-  function next_ptr(p : natural) return natural is
-  begin
-    if p = DEPTH - 1 then
-      return 0;
-    end if;
-    return p + 1;
-  end function;
+  -- Pointer values after the next increment, wrapping at DEPTH.
+  signal rd_ptr_next, wr_ptr_next : natural range 0 to DEPTH - 1;
 begin
+  rd_ptr_next <= 0 when rd_ptr = DEPTH - 1 else rd_ptr + 1;
+  wr_ptr_next <= 0 when wr_ptr = DEPTH - 1 else wr_ptr + 1;
+
   full  <= '1' when count = DEPTH else '0';
   empty <= '1' when count = 0 else '0';
 
@@ -56,10 +54,10 @@ begin
       else
         if do_wr then
           mem(wr_ptr) <= s_data;
-          wr_ptr      <= next_ptr(wr_ptr);
+          wr_ptr      <= wr_ptr_next;
         end if;
         if do_rd then
-          rd_ptr <= next_ptr(rd_ptr);
+          rd_ptr <= rd_ptr_next;
         end if;
         if do_wr and not do_rd then
           count <= count + 1;
