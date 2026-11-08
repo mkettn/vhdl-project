@@ -1,1 +1,81 @@
 # vhdl-project
+
+Template for a modern VHDL-2008 project with [VUnit](https://vunit.github.io/)
+testbenches, runnable with the open-source [GHDL](https://github.com/ghdl/ghdl)
+simulator and checked in CI on every push.
+
+## Layout
+
+```
+run.py                      VUnit runner for all projects
+requirements.txt            Python dependencies (VUnit)
+.github/workflows/ci.yml    CI: runs the full test suite
+projects/
+  <name>/
+    src/                    synthesizable sources
+    tb/                     testbenches and simulation-only packages
+```
+
+Every directory in `projects/` is compiled into its own VHDL library named
+after the directory, so designs refer to their own units through `work.`.
+Adding a new project is just creating `projects/<name>/{src,tb}`; `run.py`
+picks it up automatically. Generic sweeps or other per-testbench settings go
+into a `configure_<name>` hook in `run.py`.
+
+## Sample projects
+
+| Project      | What it is | Testbench highlights |
+|--------------|------------|----------------------|
+| `blinky`     | Toggles an LED at `BLINK_FREQ_HZ` from a `CLK_FREQ_HZ` clock. | Measures the toggle period; run with two generic configurations. |
+| `uart_echo`  | 8N1 UART receiver + transmitter joined through a small FIFO; echoes every received byte. | Uses VUnit's `uart_master`/`uart_slave` verification components and stream interface; OSVVM random data; swept over two baud rates. |
+| `axi_rot13`  | AXI4-Lite peripheral: write 4 characters to `DATA_IN`, read their ROT13 from `DATA_OUT`. | Uses VUnit's `axi_lite_master` VC; checks byte strobes, SLVERR responses and all 256 byte values against an independent reference model. Also a plain unit test of the `rot13_pkg` functions. |
+
+### `axi_rot13` register map
+
+| Offset | Name       | Access | Description |
+|--------|------------|--------|-------------|
+| `0x0`  | `DATA_IN`  | RW     | Input word, byte `n` = character `n`. Byte strobes honoured. |
+| `0x4`  | `DATA_OUT` | RO     | ROT13 of each byte of `DATA_IN`; non-letters pass through. |
+| `0x8`  | `ID`       | RO     | `0x524F5431` (`"ROT1"`). |
+
+Writes to read-only registers and accesses to unmapped offsets respond with
+`SLVERR`.
+
+## Getting started
+
+Requirements: Python 3.9+ and GHDL (4.x recommended). On Debian/Ubuntu:
+
+```bash
+sudo apt-get install ghdl
+```
+
+```bash
+python -m venv .venv && . .venv/bin/activate
+```
+
+```bash
+pip install -r requirements.txt
+```
+
+Run all tests (in parallel):
+
+```bash
+python run.py -p 4
+```
+
+Other useful invocations:
+
+```bash
+python run.py --list
+```
+
+```bash
+python run.py "uart_echo.*"
+```
+
+```bash
+python run.py --gui "blinky.tb_blinky.*led_toggles_with_expected_period"
+```
+
+`--gui` opens the waveform in GTKWave (must be installed). Simulation output
+lands in `vunit_out/`, which is git-ignored.

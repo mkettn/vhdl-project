@@ -1,0 +1,14 @@
+# VUnit / simulator output
+vunit_out/
+*.ghw
+*.vcd
+*.fst
+*.cf
+*.o
+work-obj*.cf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
