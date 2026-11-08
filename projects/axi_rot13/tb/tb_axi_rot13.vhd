@@ -12,7 +12,7 @@ context vunit_lib.com_context;
 context vunit_lib.vc_context;
 use vunit_lib.axi_lite_master_pkg.all;
 
-use work.rot13_pkg.all;
+use work.axi_rot13_pkg.all;
 use work.rot13_ref_pkg.all;
 
 entity tb_axi_rot13 is

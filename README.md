@@ -28,7 +28,19 @@ into a `configure_<name>` hook in `run.py`.
 |--------------|------------|----------------------|
 | `blinky`     | Toggles an LED at `BLINK_FREQ_HZ` from a `CLK_FREQ_HZ` clock. | Measures the toggle period; run with two generic configurations. |
 | `uart_echo`  | 8N1 UART receiver + transmitter joined through a small FIFO; echoes every received byte. | Uses VUnit's `uart_master`/`uart_slave` verification components and stream interface; OSVVM random data; swept over two baud rates. |
-| `axi_rot13`  | AXI4-Lite peripheral: write 4 characters to `DATA_IN`, read their ROT13 from `DATA_OUT`. | Uses VUnit's `axi_lite_master` VC; checks byte strobes, SLVERR responses and all 256 byte values against an independent reference model. Also a plain unit test of the `rot13_pkg` functions. |
+| `axi_rot13`  | ROT13 device (`rot13`, built from one `rot13_char` per byte) plus its AXI4-Lite embedding (`axi_rot13`): write 4 characters to `DATA_IN`, read their ROT13 from `DATA_OUT`. | Unit test of the bus-agnostic `rot13` device; AXI-level test with VUnit's `axi_lite_master` VC checking byte strobes, SLVERR responses and all 256 byte values against an independent reference model. |
+
+### `axi_rot13` structure
+
+```
+axi_rot13            AXI4-Lite slave: handshakes, DATA_IN register, decode
+└── rot13            the device: bus-agnostic, NUM_BYTES wide, combinational
+    └── rot13_char   one per byte lane
+```
+
+The register map constants live in `axi_rot13_pkg`. The device itself has no
+knowledge of the bus, so it can be embedded behind Avalon, Wishbone or a
+stream interface the same way.
 
 ### `axi_rot13` register map
 

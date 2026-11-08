@@ -1,4 +1,7 @@
--- axi_rot13: AXI4-Lite peripheral that applies ROT13 to written data.
+-- axi_rot13: AXI4-Lite embedding of the rot13 device.
+--
+-- Holds the DATA_IN register and exposes the output of the rot13 device
+-- instance as DATA_OUT.
 --
 -- Register map (32-bit registers, byte offsets):
 --   0x0 DATA_IN  RW  Input word; byte strobes are honoured.
@@ -11,7 +14,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-use work.rot13_pkg.all;
+use work.axi_rot13_pkg.all;
 
 entity axi_rot13 is
   generic (
@@ -50,7 +53,8 @@ architecture rtl of axi_rot13 is
   constant RESP_OKAY   : std_logic_vector(1 downto 0) := "00";
   constant RESP_SLVERR : std_logic_vector(1 downto 0) := "10";
 
-  signal data_in : std_logic_vector(31 downto 0) := (others => '0');
+  signal data_in  : std_logic_vector(31 downto 0) := (others => '0');
+  signal data_out : std_logic_vector(31 downto 0);
 
   -- write path: address and data may arrive in any order
   signal aw_addr  : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
@@ -66,13 +70,18 @@ architecture rtl of axi_rot13 is
   signal rdata  : std_logic_vector(31 downto 0) := (others => '0');
   signal rresp  : std_logic_vector(1 downto 0) := RESP_OKAY;
 
-  function word_offset(addr : std_logic_vector) return natural is
-    variable a : unsigned(addr'length - 1 downto 0) := unsigned(addr);
-  begin
-    a(1 downto 0) := "00";  -- ignore byte offset within the word
-    return to_integer(a);
-  end function;
+  -- Byte offsets of the addressed registers, ignoring the byte lane bits.
+  signal araddr_offset : natural;
 begin
+  rot13_inst : entity work.rot13
+    generic map (NUM_BYTES => 4)
+    port map (
+      data_in  => data_in,
+      data_out => data_out
+    );
+
+  araddr_offset <= 4 * to_integer(unsigned(s_axi_araddr(ADDR_WIDTH - 1 downto 2)));
+
   -- Accept a new address/data beat only while nothing is buffered for it.
   s_axi_awready <= not aw_valid;
   s_axi_wready  <= not w_valid;
@@ -114,7 +123,7 @@ begin
           aw_valid <= '0';
           w_valid  <= '0';
           bvalid   <= '1';
-          if word_offset(addr) = REG_DATA_IN then
+          if 4 * to_integer(unsigned(addr(ADDR_WIDTH - 1 downto 2))) = REG_DATA_IN then
             for i in 0 to 3 loop
               if strb(i) = '1' then
                 data_in(8 * i + 7 downto 8 * i) <= data(8 * i + 7 downto 8 * i);
@@ -155,9 +164,9 @@ begin
         if s_axi_arvalid = '1' and rvalid = '0' then
           rvalid <= '1';
           rresp  <= RESP_OKAY;
-          case word_offset(s_axi_araddr) is
+          case araddr_offset is
             when REG_DATA_IN  => rdata <= data_in;
-            when REG_DATA_OUT => rdata <= rot13_word(data_in);
+            when REG_DATA_OUT => rdata <= data_out;
             when REG_ID       => rdata <= ROT13_ID;
             when others =>
               rdata <= (others => '0');
