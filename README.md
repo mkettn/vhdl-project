@@ -91,3 +91,15 @@ python run.py --gui "blinky.tb_blinky.*led_toggles_with_expected_period"
 
 `--gui` opens the waveform in GTKWave (must be installed). Simulation output
 lands in `vunit_out/`, which is git-ignored.
+
+## CI
+
+`.github/workflows/ci.yml` runs the full suite on every push and pull request.
+`tools/xunit_summary.py` turns VUnit's xunit report into a pass/fail table on
+the workflow run's summary page, and adds an error annotation (with the
+failing check's message) for every failed test. To see the same table
+locally:
+
+```bash
+python run.py -p 4 --xunit-xml test_results.xml; python tools/xunit_summary.py test_results.xml
+```
